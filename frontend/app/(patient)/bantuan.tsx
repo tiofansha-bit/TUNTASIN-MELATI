@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { View, Text, ScrollView, Linking, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { makeStyles, useTheme } from "@/src/theme";
@@ -25,6 +26,7 @@ export default function Bantuan() {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const { data, isLoading, isError } = useQuery<Help>({
@@ -32,12 +34,16 @@ export default function Bantuan() {
     queryFn: () => api("/patient/help"),
   });
 
+  const { data: unread } = useQuery<{ count: number }>({
+    queryKey: ["patient-unread"],
+    queryFn: () => api("/patient/messages/unread"),
+  });
+
   if (isLoading) return <View style={styles.root}><Loading /></View>;
   if (isError || !data)
     return <View style={[styles.root, { paddingTop: insets.top }]}><StateView icon="cloud-offline-outline" title="Gagal memuat" /></View>;
 
   const call = (num: string) => Linking.openURL(`tel:${num}`).catch(() => {});
-  const wa = (num: string) => Linking.openURL(`https://wa.me/${num.replace(/^0/, "62")}`).catch(() => {});
 
   return (
     <View style={styles.root}>
@@ -47,9 +53,12 @@ export default function Bantuan() {
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.bigRow}>
-          <Pressable testID="help-chat" style={[styles.bigCard, { backgroundColor: colors.brandPrimary }]} onPress={() => wa(data.clinic.phone)}>
-            <Icon name="logo-whatsapp" size={34} color={colors.onBrandPrimary} />
+          <Pressable testID="help-chat" style={[styles.bigCard, { backgroundColor: colors.brandPrimary }]} onPress={() => router.push("/chat-pasien")}>
+            <Icon name="chatbubbles" size={34} color={colors.onBrandPrimary} />
             <Text style={styles.bigCardText}>Chat Petugas</Text>
+            {unread && unread.count > 0 ? (
+              <View style={styles.chatBadge}><Text style={styles.chatBadgeText}>{unread.count}</Text></View>
+            ) : null}
           </Pressable>
           <Pressable testID="help-call" style={[styles.bigCard, { backgroundColor: colors.info }]} onPress={() => call(data.clinic.phone)}>
             <Icon name="call" size={34} color="#FFFFFF" />
@@ -122,6 +131,8 @@ const useStyles = makeStyles((c) => ({
   bigRow: { flexDirection: "row", gap: 12 },
   bigCard: { flex: 1, borderRadius: 20, paddingVertical: 28, alignItems: "center", gap: 10, minHeight: 120, justifyContent: "center" },
   bigCardText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  chatBadge: { position: "absolute", top: 12, right: 12, backgroundColor: c.error, borderRadius: 999, minWidth: 22, height: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },
+  chatBadgeText: { color: c.onError, fontSize: 12, fontWeight: "700" },
   emergency: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: c.error, borderRadius: 16, padding: 16 },
   emergencyTitle: { color: c.onError, fontSize: 16, fontWeight: "700" },
   emergencySub: { color: c.onError, fontSize: 13, opacity: 0.9 },

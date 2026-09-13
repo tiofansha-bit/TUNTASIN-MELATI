@@ -189,6 +189,10 @@ class ChangePinBody(BaseModel):
     new_pin: str = Field(min_length=4, max_length=12)
 
 
+class MessageBody(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
 # --------------------------------------------------------------------------- #
 # Derived analytics
 # --------------------------------------------------------------------------- #
@@ -840,6 +844,120 @@ async def staff_reports(user: dict = Depends(require_staff)):
 
 
 # --------------------------------------------------------------------------- #
+# Chat (patient <-> assigned staff), one thread per patient
+# --------------------------------------------------------------------------- #
+async def thread_messages(patient_id: str, viewer_role: str) -> list:
+    """Return the full thread (oldest first) and mark incoming messages as read."""
+    if viewer_role == "patient":
+        await db.messages.update_many(
+            {"patient_id": patient_id, "sender_role": "staff", "read_by_patient": False},
+            {"$set": {"read_by_patient": True}},
+        )
+    else:
+        await db.messages.update_many(
+            {"patient_id": patient_id, "sender_role": "patient", "read_by_staff": False},
+            {"$set": {"read_by_staff": True}},
+        )
+    return await db.messages.find({"patient_id": patient_id}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+
+
+@api.get("/patient/messages")
+async def patient_messages(user: dict = Depends(require_patient)):
+    p = await get_my_patient(user)
+    msgs = await thread_messages(p["id"], "patient")
+    clinic = await db.settings.find_one({"id": "clinic"}, {"_id": 0})
+    return {
+        "messages": msgs,
+        "chat_hours": clinic.get("chat_hours") if clinic else None,
+        "clinic_name": clinic.get("name") if clinic else "Petugas",
+    }
+
+
+@api.get("/patient/messages/unread")
+async def patient_unread(user: dict = Depends(require_patient)):
+    p = await get_my_patient(user)
+    count = await db.messages.count_documents(
+        {"patient_id": p["id"], "sender_role": "staff", "read_by_patient": False}
+    )
+    return {"count": count}
+
+
+@api.post("/patient/messages")
+async def patient_send_message(body: MessageBody, user: dict = Depends(require_patient)):
+    p = await get_my_patient(user)
+    doc = {
+        "id": new_id(), "patient_id": p["id"], "sender_role": "patient",
+        "sender_id": user["id"], "sender_name": p["name"], "text": body.text.strip(),
+        "created_at": iso(now_utc()), "read_by_patient": True, "read_by_staff": False,
+    }
+    await db.messages.insert_one(doc)
+    await audit(user["id"], "send_message", "message", doc["id"])
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.get("/staff/messages/unread")
+async def staff_unread(user: dict = Depends(require_staff)):
+    pids = [p["id"] for p in await db.patients.find(
+        {"assigned_staff_ids": user["id"]}, {"_id": 0, "id": 1}).to_list(1000)]
+    count = await db.messages.count_documents(
+        {"patient_id": {"$in": pids}, "sender_role": "patient", "read_by_staff": False}
+    )
+    return {"count": count}
+
+
+@api.get("/staff/conversations")
+async def staff_conversations(user: dict = Depends(require_staff)):
+    patients = await db.patients.find({"assigned_staff_ids": user["id"]}, {"_id": 0}).to_list(1000)
+    convos = []
+    for p in patients:
+        last = await db.messages.find_one(
+            {"patient_id": p["id"]}, {"_id": 0}, sort=[("created_at", -1)]
+        )
+        unread = await db.messages.count_documents(
+            {"patient_id": p["id"], "sender_role": "patient", "read_by_staff": False}
+        )
+        convos.append({
+            "patient_id": p["id"], "name": p["name"], "code": p["code"],
+            "kelurahan": p.get("kelurahan"),
+            "last_text": last["text"] if last else None,
+            "last_at": last["created_at"] if last else None,
+            "last_sender": last["sender_role"] if last else None,
+            "unread": unread,
+        })
+    convos.sort(key=lambda c: c["last_at"] or "", reverse=True)
+    convos.sort(key=lambda c: 0 if c["unread"] > 0 else 1)
+    return {"conversations": convos}
+
+
+@api.get("/staff/patients/{patient_id}/messages")
+async def staff_thread(patient_id: str, user: dict = Depends(require_staff)):
+    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"]}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Pasien tidak ditemukan")
+    msgs = await thread_messages(patient_id, "staff")
+    return {"messages": msgs, "patient": {
+        "id": p["id"], "name": p["name"], "code": p["code"],
+        "phone": p.get("phone"), "kelurahan": p.get("kelurahan"),
+    }}
+
+
+@api.post("/staff/patients/{patient_id}/messages")
+async def staff_send_message(patient_id: str, body: MessageBody, user: dict = Depends(require_staff)):
+    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"]})
+    if not p:
+        raise HTTPException(404, "Pasien tidak ditemukan")
+    doc = {
+        "id": new_id(), "patient_id": patient_id, "sender_role": "staff",
+        "sender_id": user["id"], "sender_name": user.get("name", "Petugas"),
+        "text": body.text.strip(), "created_at": iso(now_utc()),
+        "read_by_patient": False, "read_by_staff": True,
+    }
+    await db.messages.insert_one(doc)
+    await audit(user["id"], "send_message", "message", doc["id"])
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+# --------------------------------------------------------------------------- #
 # Seed
 # --------------------------------------------------------------------------- #
 @app.on_event("startup")
@@ -847,6 +965,7 @@ async def startup():
     await db.users.create_index("username", unique=True)
     await db.patients.create_index("user_id")
     await db.dose_confirmations.create_index([("patient_id", 1), ("date", 1)])
+    await db.messages.create_index([("patient_id", 1), ("created_at", 1)])
     if await db.users.count_documents({}) > 0:
         logger.info("Seed data already present, skipping.")
         return
@@ -902,6 +1021,7 @@ async def seed():
         "tahap_lanjutan", "belum_konfirmasi",
     ]
 
+    seed_msgs = []
     for i, scn in enumerate(scenarios):
         pid = new_id()
         uid = new_id()
@@ -1019,6 +1139,32 @@ async def seed():
                 "reason": "Mual atau muntah", "note": "", "reported_at": iso(now_utc())})
             await create_alert(patient, "tidak_minum", "Pasien melapor: Mual atau muntah", "oranye")
 
+        if i == 0:
+            seed_msgs.append({
+                "id": new_id(), "patient_id": pid, "sender_role": "patient",
+                "sender_id": uid, "sender_name": name,
+                "text": "Selamat pagi Bu, saya sudah minum obat pagi ini.",
+                "created_at": iso(now_utc() - timedelta(hours=3)),
+                "read_by_patient": True, "read_by_staff": True,
+            })
+            seed_msgs.append({
+                "id": new_id(), "patient_id": pid, "sender_role": "staff",
+                "sender_id": staff_id, "sender_name": "Petugas Rina",
+                "text": "Bagus sekali, terima kasih sudah rutin. Tetap semangat ya!",
+                "created_at": iso(now_utc() - timedelta(hours=2, minutes=50)),
+                "read_by_patient": False, "read_by_staff": True,
+            })
+        if scn == "keluhan_berat":
+            seed_msgs.append({
+                "id": new_id(), "patient_id": pid, "sender_role": "patient",
+                "sender_id": uid, "sender_name": name,
+                "text": "Bu, badan saya terasa sangat lemas dan kulit agak menguning. Apakah saya perlu ke Puskesmas?",
+                "created_at": iso(now_utc() - timedelta(minutes=40)),
+                "read_by_patient": True, "read_by_staff": False,
+            })
+
+    if seed_msgs:
+        await db.messages.insert_many(seed_msgs)
     logger.info("Seed complete.")
 
 

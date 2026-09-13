@@ -37,6 +37,7 @@ export default function StaffDashboard() {
     queryFn: () => api("/staff/dashboard"),
   });
   const { data: reports } = useQuery<any>({ queryKey: ["staff-reports"], queryFn: () => api("/staff/reports") });
+  const { data: chatUnread } = useQuery<{ count: number }>({ queryKey: ["staff-unread"], queryFn: () => api("/staff/messages/unread") });
 
   if (isLoading) return <View style={styles.root}><Loading /></View>;
   if (isError || !data)
@@ -52,12 +53,20 @@ export default function StaffDashboard() {
           <Text style={styles.hello}>Dashboard Pemantauan</Text>
           <Text style={styles.staffName}>{data.staff_name} • Puskesmas Melati</Text>
         </View>
-        <Pressable style={styles.alertBtn} onPress={() => router.push("/(staff)/alert")} testID="header-alerts">
-          <Icon name="notifications" size={22} color={colors.onSurface} />
-          {data.metrics.red_alerts > 0 ? (
-            <View style={styles.badge}><Text style={styles.badgeText}>{data.metrics.red_alerts}</Text></View>
-          ) : null}
-        </Pressable>
+        <View style={styles.headerBtns}>
+          <Pressable style={styles.alertBtn} onPress={() => router.push("/chat-daftar")} testID="header-chat">
+            <Icon name="chatbubbles" size={22} color={colors.onSurface} />
+            {chatUnread && chatUnread.count > 0 ? (
+              <View style={styles.badge}><Text style={styles.badgeText}>{chatUnread.count}</Text></View>
+            ) : null}
+          </Pressable>
+          <Pressable style={styles.alertBtn} onPress={() => router.push("/(staff)/alert")} testID="header-alerts">
+            <Icon name="notifications" size={22} color={colors.onSurface} />
+            {data.metrics.red_alerts > 0 ? (
+              <View style={styles.badge}><Text style={styles.badgeText}>{data.metrics.red_alerts}</Text></View>
+            ) : null}
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -128,6 +137,7 @@ const useStyles = makeStyles((c) => ({
   hello: { fontSize: 22, fontWeight: "700", color: c.onSurface },
   staffName: { fontSize: 13, color: c.muted, marginTop: 2 },
   alertBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, alignItems: "center", justifyContent: "center" },
+  headerBtns: { flexDirection: "row", gap: 8 },
   badge: { position: "absolute", top: 4, right: 4, backgroundColor: c.error, borderRadius: 999, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   badgeText: { color: c.onError, fontSize: 10, fontWeight: "700" },
   content: { paddingHorizontal: 16, paddingBottom: 24, gap: 12 },

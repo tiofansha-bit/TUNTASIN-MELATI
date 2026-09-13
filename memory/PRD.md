@@ -27,8 +27,11 @@ Mobile-first app for tuberculosis (TB) medication adherence monitoring in the wo
 - **Demo data**: 22 simulated patients across all scenarios + 2 demo accounts.
 - **Testing**: 24/24 backend pytest pass; frontend flows verified.
 
+## Implemented (2026-09)
+- **Chat Pasien–Petugas (in-app)**: one thread per patient. Backend `messages` collection + endpoints — patient: GET/POST `/api/patient/messages`, GET `/api/patient/messages/unread`; staff: GET `/api/staff/conversations` (unread-first, then newest), GET/POST `/api/staff/patients/{id}/messages`, GET `/api/staff/messages/unread`. Read-receipts on thread open. RBAC + assignment enforced (403/404). Entry points: patient Bantuan "Chat Petugas" card (with unread badge) → `app/chat-pasien.tsx`; staff Dashboard header chat button (with unread badge) → `app/chat-daftar.tsx` (conversation list) → `app/chat-percakapan.tsx`. Reusable `src/components/chat.tsx` (KeyboardAvoidingView translate-with-padding, inverted list). Send/receive + pull/tap refresh, service-hours info banner (no quick-reply templates, per user choice). Tested: 11/11 backend + frontend flows pass.
+
 ## Prioritized backlog
-- **P1**: Chat pasien–petugas (real-time), fallback WhatsApp/SMS reminder config, extra-large font accessibility mode, offline queue + "Tersimpan, menunggu sinkronisasi".
+- **P1**: fallback WhatsApp/SMS reminder config, extra-large font accessibility mode, offline queue + "Tersimpan, menunggu sinkronisasi".
 - **P1**: Report export (PDF/Excel/CSV) on staff web; home-visit records; consent capture screen.
 - **P2**: In-app scheduled reminders / push notifications (needs native build), edukasi audio TTS, configurable alert-threshold UI, sputum results entry.
 
