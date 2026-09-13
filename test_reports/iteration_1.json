@@ -1,0 +1,37 @@
+{
+  "summary": "Melati TUNTASin MVP tested end-to-end. Backend: 24/24 pytest tests PASS (auth, RBAC, patient today/schedule/help/symptom/unable/dose-confirm 409/change-pin/logout-all, staff dashboard/patients/filters/search/detail/plan-audit/alerts+action). Frontend (Expo web preview): patient login -> Hari Ini renders with treatment day, phase, progress, med times, next services (ambil obat, kontrol, dahak, timbang), motivation, and correct 'Terima kasih, obat hari ini sudah tercatat' banner when dose already confirmed. Jadwal shows 30-day calendar with color legend + scheduled services + est end date. Staff login -> Dashboard shows red-alert banner, all 13 metrics tiles, reports summary, kelurahan distribution. Pasien tab shows Daftar Prioritas with risk/phase/kelurahan filter chips, search, and patient cards with risk badges + Tindak Lanjuti buttons. Alert tab shows Manajemen Alert with filter chips (Semua/Baru/Ditindaklanjuti/Selesai) and cards colored by priority (merah/oranye). No red-screen errors, no deprecated Expo packages detected, no protected file modifications.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "web preview", "issue": "Non-blocking web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — originates from react-native-web internals; harmless on device but worth checking any custom pointerEvents props if flagged in future."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_melati_backend.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~1030 lines and mixes routes, analytics, and a large seed block. Not a bug, but consider splitting seed logic into a separate module for maintainability post-MVP.",
+    "risk_level filter is applied after fetching rows in /staff/patients (post-filter in Python). Fine at 22 patients; consider persisting computed risk if the roster grows.",
+    "MongoDB documents cleanly exclude _id via projections — verified.",
+    "All URLs come from env; no hardcoded backend URL in frontend or backend."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (new)",
+    "/app/backend/tests/conftest.py (new)",
+    "/app/backend/tests/test_melati_backend.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100% of flows exercised"},
+  "seed_data_creation": "No new seed data created. Tests used seeded accounts (pasien, pasien17-21, petugas). Some test-created alerts/dose confirmations remain in DB (they are expected demo activity and are compatible with the app's normal flow).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Note: pasien17 has had logout-all invoked (token_version bumped) and pasien21 had PIN changed then reverted. Both remain fully usable with PIN 1234. If retesting dose-confirm duplicate 409 on 'pasien', a taken record for today already exists, so the FIRST call now returns 409 (still valid). To retest fresh, either wipe dose_confirmations for pasien for today or use pasien02..pasien16 which have varied seeded histories."
+}
