@@ -4,6 +4,7 @@ Two roles: `patient` and `staff`. Auth is username + PIN (bcrypt) with JWT.
 All IDs are uuid strings so MongoDB documents serialize cleanly to JSON.
 """
 import os
+import re
 import uuid
 import logging
 import random
@@ -13,6 +14,7 @@ from datetime import datetime, timezone, timedelta, date, time
 import jwt
 import bcrypt
 from dotenv import load_dotenv
+from pymongo.errors import DuplicateKeyError
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.cors import CORSMiddleware
@@ -191,6 +193,26 @@ class ChangePinBody(BaseModel):
 
 class MessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+
+
+USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{2,39}$")
+
+
+class NewPatientBody(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    username: str = Field(min_length=3, max_length=40)
+    pin: str = Field(min_length=4, max_length=12)
+    phone: Optional[str] = ""
+    kelurahan: str = Field(min_length=1, max_length=60)
+
+
+class PatientProfileBody(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    kelurahan: Optional[str] = None
+    age_group: Optional[str] = None  # dewasa | anak
+    status: Optional[str] = None     # aktif | selesai
 
 
 # --------------------------------------------------------------------------- #
@@ -631,7 +653,7 @@ async def build_patient_row(p: dict) -> dict:
 
 @api.get("/staff/dashboard")
 async def staff_dashboard(user: dict = Depends(require_staff)):
-    patients = await db.patients.find({"assigned_staff_ids": user["id"]}, {"_id": 0}).to_list(1000)
+    patients = await db.patients.find({"assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0}).to_list(1000)
     tday = today_str()
     m = {
         "total_active": 0, "took_today": 0, "not_confirmed": 0, "late_confirm": 0,
@@ -686,7 +708,7 @@ async def staff_patients(
     status_f: Optional[str] = Query(None, alias="status"),
     search: Optional[str] = None,
 ):
-    q = {"assigned_staff_ids": user["id"]}
+    q = {"assigned_staff_ids": user["id"], "deleted_at": None}
     if kelurahan:
         q["kelurahan"] = kelurahan
     if phase:
@@ -704,14 +726,14 @@ async def staff_patients(
         rows = [r for r in rows if s in r["name"].lower() or s in r["code"].lower()]
     order = {"merah": 0, "oranye": 1, "kuning": 2, "hijau": 3}
     rows.sort(key=lambda r: (order.get(r["risk_level"], 9), -r["unconfirmed"]))
-    all_p = await db.patients.find({"assigned_staff_ids": user["id"]}, {"_id": 0, "kelurahan": 1}).to_list(1000)
+    all_p = await db.patients.find({"assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0, "kelurahan": 1}).to_list(1000)
     kelurahans = sorted({p.get("kelurahan") for p in all_p if p.get("kelurahan")})
     return {"patients": rows, "kelurahans": kelurahans}
 
 
 @api.get("/staff/patients/{patient_id}")
 async def staff_patient_detail(patient_id: str, user: dict = Depends(require_staff)):
-    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"]}, {"_id": 0})
+    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Pasien tidak ditemukan")
     row = await build_patient_row(p)
@@ -759,7 +781,7 @@ async def staff_patient_detail(patient_id: str, user: dict = Depends(require_sta
 
 @api.patch("/staff/patients/{patient_id}/plan")
 async def update_plan(patient_id: str, body: PlanBody, user: dict = Depends(require_staff)):
-    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"]})
+    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"], "deleted_at": None})
     if not p:
         raise HTTPException(404, "Pasien tidak ditemukan")
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -815,7 +837,7 @@ async def alert_action(alert_id: str, body: AlertActionBody, user: dict = Depend
 
 @api.get("/staff/reports")
 async def staff_reports(user: dict = Depends(require_staff)):
-    patients = await db.patients.find({"assigned_staff_ids": user["id"]}, {"_id": 0}).to_list(1000)
+    patients = await db.patients.find({"assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0}).to_list(1000)
     by_kel = {}
     completed_initial = 0
     completed_treatment = 0
@@ -898,7 +920,7 @@ async def patient_send_message(body: MessageBody, user: dict = Depends(require_p
 @api.get("/staff/messages/unread")
 async def staff_unread(user: dict = Depends(require_staff)):
     pids = [p["id"] for p in await db.patients.find(
-        {"assigned_staff_ids": user["id"]}, {"_id": 0, "id": 1}).to_list(1000)]
+        {"assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0, "id": 1}).to_list(1000)]
     count = await db.messages.count_documents(
         {"patient_id": {"$in": pids}, "sender_role": "patient", "read_by_staff": False}
     )
@@ -907,7 +929,7 @@ async def staff_unread(user: dict = Depends(require_staff)):
 
 @api.get("/staff/conversations")
 async def staff_conversations(user: dict = Depends(require_staff)):
-    patients = await db.patients.find({"assigned_staff_ids": user["id"]}, {"_id": 0}).to_list(1000)
+    patients = await db.patients.find({"assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0}).to_list(1000)
     convos = []
     for p in patients:
         last = await db.messages.find_one(
@@ -931,7 +953,7 @@ async def staff_conversations(user: dict = Depends(require_staff)):
 
 @api.get("/staff/patients/{patient_id}/messages")
 async def staff_thread(patient_id: str, user: dict = Depends(require_staff)):
-    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"]}, {"_id": 0})
+    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"], "deleted_at": None}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Pasien tidak ditemukan")
     msgs = await thread_messages(patient_id, "staff")
@@ -943,7 +965,7 @@ async def staff_thread(patient_id: str, user: dict = Depends(require_staff)):
 
 @api.post("/staff/patients/{patient_id}/messages")
 async def staff_send_message(patient_id: str, body: MessageBody, user: dict = Depends(require_staff)):
-    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"]})
+    p = await db.patients.find_one({"id": patient_id, "assigned_staff_ids": user["id"], "deleted_at": None})
     if not p:
         raise HTTPException(404, "Pasien tidak ditemukan")
     doc = {
@@ -958,6 +980,90 @@ async def staff_send_message(patient_id: str, body: MessageBody, user: dict = De
 
 
 # --------------------------------------------------------------------------- #
+# Staff patient management (create / edit profile / soft-delete)
+# --------------------------------------------------------------------------- #
+@api.post("/staff/patients", status_code=201)
+async def create_patient(body: NewPatientBody, user: dict = Depends(require_staff)):
+    username = body.username.strip().lower()
+    if not USERNAME_RE.fullmatch(username):
+        raise HTTPException(400, "Username hanya boleh huruf kecil, angka, titik, garis bawah/strip (min 3 karakter)")
+    if not body.pin.isdigit():
+        raise HTTPException(400, "PIN harus berupa angka")
+    if await db.users.find_one({"username": username}):
+        raise HTTPException(409, "Username sudah dipakai")
+
+    uid = new_id()
+    pid = new_id()
+    seq = await db.patients.count_documents({}) + 1
+    today = date.today()
+    try:
+        await db.users.insert_one({
+            "id": uid, "username": username, "pin_hash": hash_pin(body.pin),
+            "role": "patient", "name": body.name.strip(), "token_version": 0,
+            "disabled": False, "phone": body.phone or "",
+        })
+    except DuplicateKeyError:
+        raise HTTPException(409, "Username sudah dipakai")
+
+    patient = {
+        "id": pid, "user_id": uid, "code": f"TB-{today.year}{seq:03d}", "name": body.name.strip(),
+        "phone": body.phone or "", "address": "", "kelurahan": body.kelurahan.strip(),
+        "age_group": "dewasa",
+        "start_date": today.isoformat(), "est_end_date": (today + timedelta(days=180)).isoformat(),
+        "phase": "awal", "classification": "TB Sensitif Obat", "status": "aktif",
+        "assigned_staff_ids": [user["id"]],
+        "med_times": ["08:00", "20:00"], "med_name": "OAT Kategori 1 (sesuai resep)",
+        "med_count": "3 tablet FDC",
+        "next_pickup_date": (today + timedelta(days=7)).isoformat(),
+        "next_control_date": (today + timedelta(days=14)).isoformat(),
+        "next_sputum_date": (today + timedelta(days=30)).isoformat(),
+        "next_weigh_date": (today + timedelta(days=14)).isoformat(),
+        "risk_override": None, "reminder_interval_min": 60, "deleted_at": None,
+    }
+    await db.patients.insert_one(patient)
+    await audit(user["id"], "create_patient", "patient", pid, {"username": username, "code": patient["code"]})
+    return {"id": pid, "code": patient["code"], "username": username}
+
+
+@api.patch("/staff/patients/{patient_id}/profile")
+async def update_patient_profile(patient_id: str, body: PatientProfileBody, user: dict = Depends(require_staff)):
+    p = await db.patients.find_one(
+        {"id": patient_id, "assigned_staff_ids": user["id"], "deleted_at": None}
+    )
+    if not p:
+        raise HTTPException(404, "Pasien tidak ditemukan")
+    if body.status is not None and body.status not in ("aktif", "selesai"):
+        raise HTTPException(400, "Status tidak valid")
+    if body.age_group is not None and body.age_group not in ("dewasa", "anak"):
+        raise HTTPException(400, "Kelompok umur tidak valid")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        return {"ok": True}
+    before = {k: p.get(k) for k in updates}
+    await db.patients.update_one({"id": patient_id}, {"$set": updates})
+    user_upd = {k: updates[k] for k in ("name", "phone") if k in updates}
+    if user_upd:
+        await db.users.update_one({"id": p["user_id"]}, {"$set": user_upd})
+    await audit(user["id"], "update_profile", "patient", patient_id, {"before": before, "after": updates})
+    return {"ok": True}
+
+
+@api.delete("/staff/patients/{patient_id}")
+async def delete_patient(patient_id: str, user: dict = Depends(require_staff)):
+    p = await db.patients.find_one(
+        {"id": patient_id, "assigned_staff_ids": user["id"], "deleted_at": None}
+    )
+    if not p:
+        raise HTTPException(404, "Pasien tidak ditemukan atau sudah dihapus")
+    await db.patients.update_one({"id": patient_id}, {"$set": {"deleted_at": iso(now_utc())}})
+    await db.users.update_one(
+        {"id": p["user_id"]}, {"$set": {"disabled": True}, "$inc": {"token_version": 1}}
+    )
+    await audit(user["id"], "delete_patient", "patient", patient_id, {"code": p.get("code")})
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
 # Seed
 # --------------------------------------------------------------------------- #
 @app.on_event("startup")
@@ -966,6 +1072,7 @@ async def startup():
     await db.patients.create_index("user_id")
     await db.dose_confirmations.create_index([("patient_id", 1), ("date", 1)])
     await db.messages.create_index([("patient_id", 1), ("created_at", 1)])
+    await db.patients.update_many({"deleted_at": {"$exists": False}}, {"$set": {"deleted_at": None}})
     if await db.users.count_documents({}) > 0:
         logger.info("Seed data already present, skipping.")
         return
@@ -1067,6 +1174,7 @@ async def seed():
             "next_sputum_date": next_sputum, "next_weigh_date": next_weigh,
             "risk_override": None,
             "reminder_interval_min": 60,
+            "deleted_at": None,
         }
         await db.patients.insert_one(patient)
 

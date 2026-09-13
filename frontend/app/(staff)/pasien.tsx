@@ -56,7 +56,13 @@ export default function Pasien() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Daftar Prioritas Pasien</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Daftar Prioritas Pasien</Text>
+          <Pressable style={styles.addBtn} onPress={() => router.push("/tambah-pasien")} testID="btn-add-patient">
+            <Icon name="person-add" size={16} color={colors.onBrandPrimary} />
+            <Text style={styles.addBtnText}>Tambah</Text>
+          </Pressable>
+        </View>
         <View style={styles.searchWrap}>
           <Icon name="search" size={18} color={colors.muted} />
           <TextInput
@@ -183,6 +189,9 @@ const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
   header: { paddingHorizontal: 16, paddingBottom: 8, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border, gap: 8 },
   title: { fontSize: 20, fontWeight: "700", color: c.onSurface },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  addBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: c.brandPrimary, paddingHorizontal: 14, height: 40, borderRadius: 12 },
+  addBtnText: { color: c.onBrandPrimary, fontSize: 14, fontWeight: "700" },
   searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: c.surfaceTertiary, borderRadius: 12, paddingHorizontal: 12, height: 44 },
   searchInput: { flex: 1, fontSize: 15, color: c.onSurface, height: "100%" },
   chipRow: { gap: 8, paddingVertical: 2, paddingRight: 8 },

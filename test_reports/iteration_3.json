@@ -1,0 +1,45 @@
+{
+  "summary": "Staff patient management (create / edit / soft-delete) tested end-to-end. Backend: 19/19 pytest tests PASS in /app/backend/tests/test_staff_patient_mgmt.py covering: POST /api/staff/patients happy path + minimal-response shape (id/code/username), auto-generated code prefix TB-YYYYnnn, defaults applied (phase=awal, status=aktif, med_times=[08:00,20:00]), created patient can log in with initial PIN, username uniqueness is case-insensitive (ABC.1 then abc.1 -> 409), invalid username regex -> 400/422, non-numeric PIN -> 400, missing fields -> 422; PATCH /api/staff/patients/{id}/profile updates all fields, name/phone reflected on linked user (verified via /auth/me), invalid status/age_group -> 400, empty body -> 200, audit trail action=update_profile written; DELETE /api/staff/patients/{id} soft-deletes (deleted_at set in DB, user.disabled=true, token_version incremented), patient hidden from GET /staff/patients, /staff/dashboard total_active, /staff/conversations, login now 401, second DELETE -> 404, PATCH on deleted -> 404, GET detail -> 404; RBAC: patient token on POST/PATCH/DELETE -> 403, no token -> 401, fake patient id -> 404. Frontend (Expo web, mobile viewport 390x844): full staff flow login petugas/1234 -> Pasien tab -> '+ Tambah' (btn-add-patient) -> /tambah-pasien with all inputs (input-name/username/pin/phone/kelurahan) + btn-save-patient creates patient and returns to list; patient card TB-2026032 appears; open detail -> btn-edit-profile opens sheet with profile-name/phone/address/kelurahan + profile-age-* + profile-status-* + btn-save-profile, save updates header name/kelurahan/age/status in detail view; btn-delete-patient -> confirm sheet -> btn-confirm-delete -> back to list with 'Tidak ada pasien' when filtered. Client-side validation: too-short username triggers 'Username minimal 3 karakter.' in [data-testid=addpatient-error]. All UI_TEST_* patients cleaned up. No red-screen errors. Only pre-existing benign RN-web warnings (pointerEvents deprecation, shadow* style deprecation).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "staff-patient/[id] - Edit Profile bottom sheet",
+        "issues": [
+          "Bottom-sheet content extends below the viewport on 390x844: profile-age-* toggles, profile-status-* toggles and btn-save-profile require internal scroll (or JS scrollIntoView in tests). Sheet is scrollable via ScrollView so functionally OK, but consider a taller sheet / reduced vertical spacing so the Save button is visible without scrolling."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_staff_patient_mgmt.py",
+    "/app/test_reports/pytest/staff_patient_mgmt_results.xml"
+  ],
+  "action_items": [
+    "Optional UX polish: in staff-patient/[id].tsx Edit Profile sheet, tighten vertical spacing so age-group + status toggles + Save button are visible without scrolling on a 390x844 viewport (currently they require scroll).",
+    "Optional hardening: server-side create_patient should also validate the PIN length via the same regex/rules exposed to the client so trailing whitespace-only PIN is rejected (currently min_length=4 via Pydantic is sufficient, but consider explicit `isdigit()` message parity with client)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:987 -- username is normalised to lower() before uniqueness check AND stored lowercase, so case-insensitive uniqueness is correctly enforced. Confirmed by test (ABC.1 vs abc.1 -> 409).",
+    "server.py:997 -- Patient code TB-YYYYnnn uses `count_documents({}) + 1`. If a hard-delete ever occurs (or code is renamed to include soft-deleted), the sequence may collide. Since app only soft-deletes, this is safe today, but consider a dedicated counter collection or unique index on `code`.",
+    "server.py:1030 -- update_patient_profile filter includes `deleted_at: None` and `assigned_staff_ids: user['id']`, so staff cannot edit unassigned or soft-deleted patients. Good.",
+    "server.py:1058 -- Soft-delete sets `deleted_at` on patient and both disables user and increments token_version, invalidating outstanding JWTs. Correct.",
+    "server.py:1039 -- `updates = {k: v for k, v in body.model_dump().items() if v is not None}` treats empty string as an update (e.g. address=''). This is intended for clearing address but worth documenting for the client.",
+    "Frontend: tambah-pasien.tsx correctly shows a client-side pre-validation error (Username minimal 3 karakter) before hitting the server; server error is also surfaced via the addpatient-error box on 400/409 responses.",
+    "Frontend: staff-patient/[id].tsx invalidates ['staff-patients'] and ['staff-dashboard'] queries on both profile save and delete via react-query, so the Pasien list and dashboard counts refresh without full reload.",
+    "MongoDB _id is consistently excluded via {\"_id\": 0} in patient/user queries. No leakage observed in any tested response.",
+    "All interactive elements in the three feature files carry appropriate testID attributes: btn-add-patient, input-name/username/pin/phone/kelurahan, btn-save-patient, btn-edit-profile, profile-name/phone/address/kelurahan, profile-age-*, profile-status-*, btn-save-profile, btn-delete-patient, btn-confirm-delete."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_staff_patient_mgmt.py (new)"
+  ],
+  "success_rate": { "backend": "100% (19/19)", "frontend": "100% of specified flows" },
+  "seed_data_creation": "None. All patients created during testing (usernames prefixed 'tst.*' from backend, 'uitest.*' / 'uitest2.*' from UI) were soft-deleted before test exit. Verified via list search -> 'Tidak ada pasien'. Demo accounts (pasien, pasien01..21, petugas) untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_staff_patient_mgmt.py and re-run cleanly with `EXPO_PUBLIC_BACKEND_URL=... pytest tests/test_staff_patient_mgmt.py -v` (uses shared fixtures from conftest.py: s, patient_token, staff_token, some_patient_id). Tests generate throwaway users each run — no cleanup needed by the next agent (module-scoped fixture handles teardown). If any 'tst.*' or 'uitest*' patients leak due to a killed test run, they can be soft-deleted via `DELETE /api/staff/patients/{id}` as petugas.",
+  "rca_of_issue": "N/A - no bugs found. All happy paths, validation, uniqueness, RBAC, soft-delete side effects, and UI wiring verified."
+}

@@ -28,6 +28,11 @@ Mobile-first app for tuberculosis (TB) medication adherence monitoring in the wo
 - **Testing**: 24/24 backend pytest pass; frontend flows verified.
 
 ## Implemented (2026-09)
+- **Staff patient management**: Add / Edit profile / Soft-delete.
+  - Add: `POST /api/staff/patients` (staff-only) — minimal fields name, username, initial PIN, phone, kelurahan; role hardcoded patient, bcrypt PIN (reuses `hash_pin`), username lowercased + regex-validated + unique (409), auto code `TB-YYYYnnn`, sensible defaults (start today, phase awal, dewasa, med_times, aktif, `deleted_at:None`). Entry: "+ Tambah" on Daftar Pasien → `app/tambah-pasien.tsx` (KeyboardAwareScrollView form).
+  - Edit profile: `PATCH /api/staff/patients/{id}/profile` — name, phone, address, kelurahan, age_group (dewasa/anak), status (aktif/selesai); name/phone propagate to linked user; audit. UI: "Edit Profil" bottom sheet on Patient Detail.
+  - Soft-delete: `DELETE /api/staff/patients/{id}` — sets `patients.deleted_at`, disables user login + bumps `token_version` (kills active session). Data retained/recoverable. All staff queries (patients/dashboard/reports/conversations/unread/detail/thread/plan) filter `deleted_at:None`; startup migration backfills existing docs. UI: "Hapus" → confirm sheet on Patient Detail.
+  - RBAC verified (patient→403, no token→401, unknown id→404). Tested: 19/19 backend + frontend flows pass.
 - **Chat Pasien–Petugas (in-app)**: one thread per patient. Backend `messages` collection + endpoints — patient: GET/POST `/api/patient/messages`, GET `/api/patient/messages/unread`; staff: GET `/api/staff/conversations` (unread-first, then newest), GET/POST `/api/staff/patients/{id}/messages`, GET `/api/staff/messages/unread`. Read-receipts on thread open. RBAC + assignment enforced (403/404). Entry points: patient Bantuan "Chat Petugas" card (with unread badge) → `app/chat-pasien.tsx`; staff Dashboard header chat button (with unread badge) → `app/chat-daftar.tsx` (conversation list) → `app/chat-percakapan.tsx`. Reusable `src/components/chat.tsx` (KeyboardAvoidingView translate-with-padding, inverted list). Send/receive + pull/tap refresh, service-hours info banner (no quick-reply templates, per user choice). Tested: 11/11 backend + frontend flows pass.
 
 ## Prioritized backlog

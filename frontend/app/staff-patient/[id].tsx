@@ -7,7 +7,7 @@ import { BarChart, LineChart } from "react-native-gifted-charts";
 import * as Haptics from "expo-haptics";
 
 import { makeStyles, useTheme } from "@/src/theme";
-import { api } from "@/src/api/client";
+import { api, ApiError } from "@/src/api/client";
 import { Button, Card, Icon, Loading, RiskPill, StateView } from "@/src/components/ui";
 import { DOSE_STATUS, SYMPTOM_LABEL, ALERT_STATUS_LABEL } from "@/src/constants";
 import { fmtDate, fmtDateShort, fmtTime, relativeDays } from "@/src/utils/date";
@@ -24,6 +24,8 @@ export default function PatientDetail() {
   const chartWidth = Math.min(width, 900) - 80;
 
   const [planOpen, setPlanOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
 
   const { data, isLoading, isError } = useQuery<any>({
     queryKey: ["staff-patient", id],
@@ -71,6 +73,10 @@ export default function PatientDetail() {
         </Card>
 
         <Button title="Kelola Rencana Pengobatan" icon="create-outline" variant="secondary" onPress={() => setPlanOpen(true)} testID="btn-edit-plan" />
+        <View style={styles.actionRow}>
+          <Button title="Edit Profil" icon="person-outline" variant="outline" onPress={() => setProfileOpen(true)} testID="btn-edit-profile" style={{ flex: 1 }} />
+          <Button title="Hapus" icon="trash-outline" variant="danger" onPress={() => setDelOpen(true)} testID="btn-delete-patient" style={{ flex: 1 }} />
+        </View>
 
         {/* Adherence calendar */}
         <Card>
@@ -200,6 +206,26 @@ export default function PatientDetail() {
           setPlanOpen(false);
         }}
       />
+      <ProfileModal
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        patient={p}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ["staff-patient", id] });
+          qc.invalidateQueries({ queryKey: ["staff-patients"] });
+          setProfileOpen(false);
+        }}
+      />
+      <DeleteModal
+        visible={delOpen}
+        onClose={() => setDelOpen(false)}
+        patient={p}
+        onDeleted={() => {
+          qc.invalidateQueries({ queryKey: ["staff-patients"] });
+          qc.invalidateQueries({ queryKey: ["staff-dashboard"] });
+          router.back();
+        }}
+      />
     </View>
   );
 }
@@ -325,6 +351,127 @@ function DateField({ label, value, onChange, testID }: { label: string; value: s
   );
 }
 
+function ProfileModal({ visible, onClose, patient, onSaved }: { visible: boolean; onClose: () => void; patient: any; onSaved: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [name, setName] = useState(patient.name || "");
+  const [phone, setPhone] = useState(patient.phone || "");
+  const [address, setAddress] = useState(patient.address || "");
+  const [kelurahan, setKelurahan] = useState(patient.kelurahan || "");
+  const [ageGroup, setAgeGroup] = useState(patient.age_group || "dewasa");
+  const [status, setStatus] = useState(patient.status || "aktif");
+  const [error, setError] = useState("");
+
+  const mut = useMutation({
+    mutationFn: () =>
+      api(`/staff/patients/${patient.id}/profile`, {
+        method: "PATCH",
+        body: {
+          name: name.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+          kelurahan: kelurahan.trim(),
+          age_group: ageGroup,
+          status,
+        },
+      }),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      onSaved();
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : "Gagal menyimpan perubahan."),
+  });
+
+  const save = () => {
+    setError("");
+    if (!name.trim()) return setError("Nama wajib diisi.");
+    if (!kelurahan.trim()) return setError("Kelurahan wajib diisi.");
+    mut.mutate();
+  };
+
+  return (
+    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetBackdrop}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Edit Profil Pasien</Text>
+            <Text style={styles.sheetHint}>Perubahan tercatat dalam audit trail.</Text>
+
+            <Text style={styles.fieldLabel}>Nama lengkap</Text>
+            <TextInput testID="profile-name" value={name} onChangeText={setName} style={styles.dateInput} placeholderTextColor={colors.muted} />
+
+            <Text style={styles.fieldLabel}>Nomor HP</Text>
+            <TextInput testID="profile-phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={styles.dateInput} placeholderTextColor={colors.muted} />
+
+            <Text style={styles.fieldLabel}>Alamat</Text>
+            <TextInput testID="profile-address" value={address} onChangeText={setAddress} style={styles.dateInput} placeholderTextColor={colors.muted} />
+
+            <Text style={styles.fieldLabel}>Kelurahan</Text>
+            <TextInput testID="profile-kelurahan" value={kelurahan} onChangeText={setKelurahan} style={styles.dateInput} placeholderTextColor={colors.muted} />
+
+            <Text style={styles.fieldLabel}>Kelompok umur</Text>
+            <View style={styles.toggleRow}>
+              {["dewasa", "anak"].map((v) => (
+                <Pressable key={v} testID={`profile-age-${v}`} onPress={() => setAgeGroup(v)} style={[styles.toggle, ageGroup === v && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
+                  <Text style={[styles.toggleText, ageGroup === v && { color: colors.onBrandPrimary }]}>{v === "dewasa" ? "Dewasa" : "Anak"}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Status pengobatan</Text>
+            <View style={styles.toggleRow}>
+              {["aktif", "selesai"].map((v) => (
+                <Pressable key={v} testID={`profile-status-${v}`} onPress={() => setStatus(v)} style={[styles.toggle, status === v && { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
+                  <Text style={[styles.toggleText, status === v && { color: colors.onBrandPrimary }]}>{v === "aktif" ? "Aktif" : "Selesai"}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {error ? <Text style={styles.errText}>{error}</Text> : null}
+            <Button title="Simpan Perubahan" onPress={save} loading={mut.isPending} testID="btn-save-profile" style={{ marginTop: 12 }} />
+            <Button title="Batal" variant="ghost" onPress={onClose} />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function DeleteModal({ visible, onClose, patient, onDeleted }: { visible: boolean; onClose: () => void; patient: any; onDeleted: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [error, setError] = useState("");
+
+  const mut = useMutation({
+    mutationFn: () => api(`/staff/patients/${patient.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      onDeleted();
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : "Gagal menghapus pasien."),
+  });
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.centerBackdrop}>
+        <View style={styles.confirmCard}>
+          <View style={styles.confirmIcon}><Icon name="trash" size={26} color={colors.onError} /></View>
+          <Text style={styles.confirmTitle}>Hapus pasien ini?</Text>
+          <Text style={styles.confirmText}>
+            {patient.name} akan disembunyikan dari daftar dan tidak bisa masuk lagi. Data tetap tersimpan dan dapat dipulihkan oleh admin bila diperlukan.
+          </Text>
+          {error ? <Text style={styles.errText}>{error}</Text> : null}
+          <Button title="Ya, Hapus Pasien" variant="danger" onPress={() => mut.mutate()} loading={mut.isPending} testID="btn-confirm-delete" style={{ marginTop: 10 }} />
+          <Button title="Batal" variant="ghost" onPress={onClose} testID="btn-cancel-delete" />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border },
@@ -368,4 +515,11 @@ const useStyles = makeStyles((c) => ({
   dateInput: { backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, color: c.onSurface },
   warnBox: { flexDirection: "row", gap: 8, backgroundColor: "#EFF6FF", padding: 12, borderRadius: 12, marginTop: 14 },
   warnText: { flex: 1, fontSize: 13, color: c.info, lineHeight: 19 },
+  actionRow: { flexDirection: "row", gap: 10 },
+  errText: { color: c.error, fontSize: 13, fontWeight: "600", marginTop: 10, textAlign: "center" },
+  centerBackdrop: { flex: 1, backgroundColor: "rgba(15,23,42,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },
+  confirmCard: { width: "100%", maxWidth: 400, backgroundColor: c.surface, borderRadius: 20, padding: 20, alignItems: "center" },
+  confirmIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.error, alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  confirmTitle: { fontSize: 19, fontWeight: "700", color: c.onSurface, textAlign: "center" },
+  confirmText: { fontSize: 14, color: c.onSurfaceSecondary, textAlign: "center", lineHeight: 20, marginTop: 8 },
 }));
