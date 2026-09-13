@@ -1,0 +1,180 @@
+{
+  "app_name": "Melati TUNTASin",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A calming, ultra-accessible health companion for patients, paired with a clean, high-density operational surface for staff.",
+  "color": {
+    "surface": "#F8FAF9",
+    "onSurface": "#0F172A",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#0F172A",
+    "surfaceTertiary": "#EEF2F0",
+    "onSurfaceTertiary": "#1E293B",
+    "surfaceInverse": "#0F172A",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#10B981",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#10B981",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#D1FAE5",
+    "onBrandSecondary": "#065F46",
+    "brandTertiary": "#ECFDF5",
+    "onBrandTertiary": "#047857",
+    "success": "#10B981",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#E2E8F0",
+    "borderStrong": "#CBD5E1",
+    "divider": "#F1F5F9",
+    "muted": "#64748B"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 14,
+      "base": 16,
+      "lg": 18,
+      "xl": 24,
+      "2xl": 32
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing for patients (xl/2xl margins). Tighter, structured spacing (md/lg) for the staff dashboard grid.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use on the bottom tab bar",
+      "Use on sticky patient confirmation buttons at the bottom of the screen",
+      "Use on sticky table headers in the staff dashboard"
+    ],
+    "dont's": [
+      "Do not use on general list rows",
+      "Do not use on data dense areas in the staff view to preserve clarity"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Patient - Hari Ini (Today)",
+      "purpose": "A hyper-simplified daily check-in screen for low-literacy patients.",
+      "states": {
+        "loading": "Centered soft green spinner.",
+        "empty": "No actions needed today illustration.",
+        "error": "Failed to load schedule. 'Muat Ulang' (Retry) button."
+      },
+      "layout": "Vertical stack layout. Top: Warm greeting ('Halo, Budi') and prominent 'Hari ke-18' indicator. Middle: Simple visual progress bar (stepped or circular) indicating treatment phase. Bottom 1/3 (Sticky): Massive full-width primary CTA 'SUDAH MINUM' (brandPrimary). Below it: secondary textual/ghost buttons for 'BELUM BISA MINUM' and 'ADA KELUHAN'. All touch targets min 64pt."
+    },
+    {
+      "name": "Patient - Jadwal (Schedule)",
+      "purpose": "View upcoming and past medication logs.",
+      "states": {
+        "loading": "Skeleton list.",
+        "empty": "No schedule found.",
+        "error": "Failed to load schedule."
+      },
+      "layout": "Simple list view using cards. Each card represents a day. Green checkmark icon for completed, outlined grey circle for upcoming. Minimal text."
+    },
+    {
+      "name": "Patient - Bantuan (Help)",
+      "purpose": "Direct access to clinic staff or emergency contact.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "N/A",
+        "error": "Failed to load contacts."
+      },
+      "layout": "Two massive cards filling the screen. Card 1: 'Chat Petugas' (Chat Staff) with WhatsApp icon. Card 2: 'Telepon Darurat' (Emergency Call). Extreme simplicity."
+    },
+    {
+      "name": "Patient - Lapor Keluhan (Report Symptom Flow)",
+      "purpose": "2-step modal flow to report why meds weren't taken or side effects.",
+      "states": {
+        "loading": "Spinner on submit.",
+        "empty": "N/A",
+        "error": "Submission failed alert."
+      },
+      "layout": "Bottom sheet or full-screen modal. Step 1: Grid of large 'reason' chips (Mual, Lupa, Habis). Step 2: Severity selection (Ringan, Sedang, Berat). ONLY use RED (error token) if 'Berat' (Severe/Urgent) is selected. Otherwise use warning or brand tones."
+    },
+    {
+      "name": "Staff - Dashboard",
+      "purpose": "High-density monitoring interface for healthcare workers.",
+      "states": {
+        "loading": "Skeleton dashboard widgets.",
+        "empty": "No active patients.",
+        "error": "Failed to load metrics."
+      },
+      "layout": "Responsive grid. Mobile: Vertical scrolling. Tablet/Desktop: 2 or 3 column grid. Top row: Key metric cards (Total Patients, Confirmed Today, Alerts). Below: Filterable list/table of priority patients. Use segmented controls for filters (Kelurahan, Phase). Sticky headers for lists."
+    },
+    {
+      "name": "Staff - Patient Detail",
+      "purpose": "Deep dive into a single patient's adherence and treatment plan.",
+      "states": {
+        "loading": "Skeleton view.",
+        "empty": "N/A",
+        "error": "Failed to load patient."
+      },
+      "layout": "Multi-section scroll. Top: Patient profile block. Middle: Adherence Calendar (color-coded grid: green=taken, yellow=late, red=missed/alert). Bottom: Alerts management and Treatment Plan editing actions."
+    }
+  ],
+  "images": {
+    "app_logo": {
+      "url": "https://images.unsplash.com/photo-1623171404570-1d196759fe20?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwyfHxqYXNtaW5lJTIwZmxvd2VyfGVufDB8fHx8MTc4OTI2NjU3NXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Jasmine flower representing Melati TUNTASin"
+    },
+    "calm_background": {
+      "url": "https://images.unsplash.com/photo-1652091705632-0755a239a186?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwxfHxjYWxtJTIwbmF0dXJlJTIwZ3JlZW4lMjBzb2Z0fGVufDB8fHx8MTc4OTI2NjU3NXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Soft calm nature green texture"
+    },
+    "staff_dashboard_banner": {
+      "url": "https://images.unsplash.com/photo-1544397189-b5a684ee08d9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwyfHxjYWxtJTIwbmF0dXJlJTIwZ3JlZW4lMjBzb2Z0fGVufDB8fHx8MTc4OTI2NjU3NXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Foggy calm lake background"
+    }
+  },
+  "haptics": {
+    "patient_confirm_meds": "success",
+    "patient_select_symptom": "selection",
+    "staff_filter_change": "selection",
+    "staff_resolve_alert": "success",
+    "urgent_alert_trigger": "heavy"
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: The Patient experience must use an oversized typography scale (start body at 16pt, titles at 24pt/32pt) and massive touch targets (minimum 64pt) to accommodate low digital literacy.",
+    "CRITICAL: Adhere strictly to the color rule: Red (`error` token) is ONLY to be used for urgent medical conditions or severe side effects. Standard UI validation errors should use `warning` or subtle `muted` tones to avoid inducing panic.",
+    "Implement two distinct layout strategies: the Patient app is a simplified vertical stack with sticky bottom CTAs; the Staff dashboard must utilize a responsive grid (`flexWrap` or `useWindowDimensions`) to adapt to tablet/desktop widths.",
+    "Do not use explicit disease imagery or language that creates stigma. Keep the tone warm, encouraging, and centered around the 'Jasmine Green' aesthetic.",
+    "Ensure the bottom navigation is only visible on the top-level screens. Modal flows (like symptom reporting) should hide the bottom tab bar.",
+    "Typography must be Plus Jakarta Sans across the board. Ensure font weights do not exceed 500 for a clean, non-aggressive feel."
+  ]
+}
