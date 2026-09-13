@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 
 import { makeStyles, useTheme } from "@/src/theme";
@@ -53,15 +53,12 @@ export default function Login() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <LinearGradient
-          colors={["#10B981", "#0D9488"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <Image
+          source={require("../assets/images/logo.webp")}
           style={styles.logo}
-        >
-          <Icon name="flower" size={40} color="#FFFFFF" />
-        </LinearGradient>
-        <Text style={styles.title}>Melati TUNTASin</Text>
+          contentFit="contain"
+          testID="app-logo"
+        />
         <Text style={styles.subtitle}>Pendamping pengobatan Anda hingga tuntas</Text>
 
         <View style={styles.form}>
@@ -128,15 +125,12 @@ const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surface },
   content: { paddingHorizontal: 24, alignItems: "center" },
   logo: {
-    width: 84,
-    height: 84,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
+    width: 280,
+    height: 112,
+    marginBottom: 12,
   },
   title: { fontSize: 28, fontWeight: "700", color: c.onSurface },
-  subtitle: { fontSize: 15, color: c.muted, marginTop: 6, textAlign: "center", marginBottom: 32 },
+  subtitle: { fontSize: 15, color: c.muted, marginTop: 2, textAlign: "center", marginBottom: 32 },
   form: { width: "100%", maxWidth: 420, gap: 8 },
   label: { fontSize: 14, fontWeight: "600", color: c.onSurfaceSecondary, marginTop: 8 },
   inputWrap: {
